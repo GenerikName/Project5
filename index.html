@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISS Tracker</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #080d19;
+    color: #f0f4ff;
+    font-family: Arial, sans-serif;
+}
+
+header {
+    padding: 25px 20px;
+    text-align: center;
+    background: linear-gradient(135deg,#111d38,#101020);
+    border-bottom: 1px solid #263858;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 30px;
+    color: #65d8ff;
+}
+
+header p {
+    color: #9aaac4;
+}
+
+.container {
+    max-width: 1100px;
+    margin: auto;
+    padding: 20px;
+}
+
+.status {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 20px;
+    color: #6cffac;
+    font-size: 13px;
+}
+
+.dot {
+    width: 9px;
+    height: 9px;
+    background: #35ed8c;
+    border-radius: 50%;
+    box-shadow: 0 0 12px #35ed8c;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.card {
+    padding: 20px;
+    background: #111b2d;
+    border: 1px solid #263858;
+    border-radius: 12px;
+}
+
+.card .label {
+    color: #91a3c2;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.card .value {
+    margin-top: 12px;
+    color: #65d8ff;
+    font-size: 24px;
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+}
+
+button, .map-link {
+    display: inline-block;
+    padding: 13px 18px;
+    background: #146bba;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+button:hover, .map-link:hover {
+    background: #208ee8;
+}
+
+.secondary {
+    background: #273750;
+}
+
+.info {
+    margin-top: 20px;
+    padding: 20px;
+    background: #111b2d;
+    border: 1px solid #263858;
+    border-radius: 12px;
+    color: #a9b8d1;
+    line-height: 1.7;
+    font-size: 14px;
+}
+
+footer {
+    padding: 25px;
+    text-align: center;
+    color: #71829e;
+    font-size: 12px;
+}
+
+@media(max-width:600px) {
+    .stats {
+        grid-template-columns: 1fr;
+    }
+
+    header h1 {
+        font-size: 24px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>ISS TRACKER</h1>
+</header>
+
+<div class="container">
+
+    <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="connection">CONNECTING TO SATELLITE DATA</span>
+    </div>
+
+    <div class="stats">
+
+        <div class="card">
+            <div class="label">Latitude</div>
+            <div class="value" id="latitude">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Longitude</div>
+            <div class="value" id="longitude">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Last Updated</div>
+            <div class="value" id="updated" style="font-size:18px">--</div>
+        </div>
+
+    </div>
+
+    <div class="controls">
+
+        <button onclick="updateISS()">
+            Update Position
+        </button>
+
+        <a class="map-link" id="googleMaps"
+           href="https://www.google.com/maps"
+           target="_blank" rel="noopener">
+            Open in Google Maps
+        </a>
+
+    </div>
+
+    <div class="info">
+
+        <strong>About the International Space Station: </strong>
+
+        <p>
+            The ISS is a habitable space station orbiting Earth.
+            It travels at approximately 28,000 km/h and completes
+            an orbit around Earth roughly every 90 minutes.
+        </p>
+
+        <p>
+            <strong>Data timestamp:</strong>
+            <span id="timestamp">Waiting for data</span>
+        </p>
+
+        <p>
+            <strong>Coordinates:</strong>
+            <span id="coordinates">Waiting for data</span>
+        </p>
+
+        <p id="error" style="color:#ff8181"></p>
+
+    </div>
+
+</div>
+
+<!-- Anime.js SplitText animation -->
+<script type="module">
+
+import {
+    animate,
+    splitText,
+    stagger
+} from "https://cdn.jsdelivr.net/npm/animejs@4.2.2/+esm";
+
+// Animate updated statistic text
+window.animateStatText = function(elementId, newValue) {
+
+    const element = document.getElementById(elementId);
+
+    // Replace previous text and character wrappers
+    element.textContent = newValue;
+
+    // Split text into individual characters
+    const { chars } = splitText(element, {
+        chars: {
+            wrap: "clip"
+        }
+    });
+
+    // Animate characters upwards
+    animate(chars, {
+        y: ["100%", "0%"],
+        opacity: [0, 1],
+        duration: 500,
+        delay: stagger(25),
+        ease: "out(3)"
+    });
+
+};
+
+</script>
+
+<script>
+
+// Tracking variables
+let timer = null;
+let requestNumber = 0;
+
+// Update ISS position using documented JSONP support
+function updateISS() {
+
+    const requestId = ++requestNumber;
+
+    document.getElementById("connection").textContent =
+        "RECEIVING SATELLITE DATA";
+
+    document.getElementById("error").textContent = "";
+
+    if (timer) {
+        clearTimeout(timer);
+    }
+
+    const callbackName = "issCallback_" + requestId;
+
+    const script = document.createElement("script");
+
+    const timeout = setTimeout(() => {
+        cleanup();
+        showError("Request timed out. Check the API connection.");
+    }, 12000);
+
+    function cleanup() {
+        clearTimeout(timeout);
+        script.remove();
+        try {
+            delete window[callbackName];
+        } catch (e) {
+            window[callbackName] = undefined;
+        }
+    }
+
+    window[callbackName] = function(data) {
+
+        cleanup();
+
+        if (
+            data.message !== "success" ||
+            !data.iss_position
+        ) {
+            showError("The API returned an unsuccessful response.");
+            return;
+        }
+
+        const lat = Number(data.iss_position.latitude);
+        const lon = Number(data.iss_position.longitude);
+
+        if (
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lon) ||
+            lat < -90 || lat > 90 ||
+            lon < -180 || lon > 180
+        ) {
+            showError("Invalid coordinates received.");
+            return;
+        }
+
+        displayPosition(lat, lon, data.timestamp);
+
+    };
+
+    script.onerror = function() {
+        cleanup();
+        showError("Could not connect to Open Notify. Check network or API availability.");
+    };
+
+    script.src =
+        "http://api.open-notify.org/iss-now.json?callback=" +
+        callbackName;
+
+    document.body.appendChild(script);
+
+}
+
+// Display returned data
+function displayPosition(lat, lon, timestamp) {
+
+    // Animate latitude
+    window.animateStatText(
+        "latitude",
+        lat.toFixed(4) + "°"
+    );
+
+    // Animate longitude
+    window.animateStatText(
+        "longitude",
+        lon.toFixed(4) + "°"
+    );
+
+    // Animate last updated time
+    window.animateStatText(
+        "updated",
+        new Date(timestamp * 1000).toLocaleTimeString()
+    );
+
+    document.getElementById("timestamp").textContent =
+        timestamp;
+
+    document.getElementById("coordinates").textContent =
+        lat.toFixed(5) + ", " + lon.toFixed(5);
+
+    document.getElementById("googleMaps").href =
+        "https://www.google.com/maps?q=" + lat + "," + lon;
+
+    document.getElementById("connection").textContent =
+        "CONNECTED";
+
+    document.getElementById("dot").style.background =
+        "#35ed8c";
+
+    // Schedule next update after 5 seconds
+    timer = setTimeout(updateISS, 5000);
+
+}
+
+// Error handling
+function showError(message) {
+
+    document.getElementById("connection").textContent =
+        "CONNECTION ERROR";
+
+    document.getElementById("dot").style.background =
+        "#ff5555";
+
+    document.getElementById("error").textContent =
+        message + " Retrying in 15 seconds.";
+
+    timer = setTimeout(updateISS, 15000);
+
+}
+
+// Make updateISS accessible to the HTML button
+window.updateISS = updateISS;
+
+// Start tracking
+updateISS();
+
+</script>
+
+</body>
+</html>
